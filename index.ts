@@ -1,6 +1,8 @@
 import express from 'express'
 import { PrismaClient } from '@prisma/client'
 import cors from 'cors'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
 const app = express()
 app.use(cors())
@@ -10,21 +12,86 @@ const PORT = process.env.PORT || 4001
 
 const prisma = new PrismaClient({ log: ['query', 'error', 'warn', 'info'] })
 
+
+function createToken(id: number) {
+    return jwt.sign({ id: id }, process.env.MY_SECRET, { expiresIn: '3days' })
+}
+
+app.post('/sign-in', async (req, res) => {
+    const { email, password } = req.body
+    try {
+        const user = await prisma.user.findUnique({
+            where: { email: email },
+            include: { orders: { select: { quantity: true, item: true } } }
+        })
+        const passwordMatches = bcrypt.compareSync(password, user.password)
+        if (user && passwordMatches) {
+            const { id, name, email, orders } = user
+            res.send({ user: { id, name, email, orders }, token: createToken(user.id) })
+        } else {
+            throw Error()
+        }
+    } catch (err) {
+        res.status(400).send({ error: 'User/password invalid.' })
+    }
+})
+
+// app.patch('/changePassword', async (req, res) => {
+//     const { email, password } = req.body
+//     const user = await prisma.user.findUnique({ where: { email: email } })
+
+//     if (user) {
+//         try {
+//             const hash = bcrypt.hashSync(password, 8)
+//             const updateUser = await prisma.user.update({ where: { email }, data: { password: hash } })
+//             res.send({ updateUser, token: createToken(updateUser.id) })
+//         } catch (err) {
+//             // @ts-ignore
+//             res.status(400).send(`<pre> ${err.message} </pre>`)
+//         }
+//     } else res.status(404).send({ error: "User not found" })
+
+// })
+
 app.get('/users', async (req, res) => {
-    const users = await prisma.user.findMany({ include: { orders: { select: { quantity: true, item: true } } } })
+    const users = await prisma.user.findMany({
+        select: {
+            id: true, name: true, email: true, orders: {
+                select:
+                    { quantity: true, item: true }
+            }
+        }
+    })
     res.send(users)
 })
 
 app.get('/users/:id', async (req, res) => {
     const id = Number(req.params.id)
     try {
-        const user = await prisma.user.findUnique({ where: { id: id }, include: { orders: { select: { quantity: true, item: true } } } })
+        const user = await prisma.user.findUnique({
+            where: { id: id }, select: {
+                id: true, name: true, email: true, orders: {
+                    select:
+                        { quantity: true, item: true }
+                }
+            }
+        })
         res.send(user)
     } catch (err) {
         // @ts-ignore
         res.status(400).send(`<pre>${err.message}</pre>`)
     }
 })
+
+// app.patch('/removeOrder', async (req, res) => {
+//     const { userId } = req.body
+//     try {
+//         const removedOrder = await prisma.order.update( { where: { userId: userId }, data: { order: {  }}})
+//         res.send(removedOrder)
+//     } catch (err) {
+//         res.status(400).send(err.message)
+//     }
+// })
 
 app.patch('/users/:id', async (req, res) => {
     const id = Number(req.params.id)
