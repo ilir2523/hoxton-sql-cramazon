@@ -17,6 +17,21 @@ function createToken(id: number) {
     return jwt.sign({ id: id }, process.env.MY_SECRET, { expiresIn: '3days' })
 }
 
+async function getUserFromToken(token: string) {
+    const decodedToken = jwt.verify(token, process.env.MY_SECRET)
+    const user = await prisma.user.findUnique({
+        // @ts-ignore
+        where: { id: decodedToken.id },
+        select: {
+            id: true, name: true, email: true, orders: {
+                select:
+                    { quantity: true, item: true }
+            }
+        }
+    })
+    return user
+}
+
 app.post('/sign-in', async (req, res) => {
     const { email, password } = req.body
     try {
@@ -33,6 +48,18 @@ app.post('/sign-in', async (req, res) => {
         }
     } catch (err) {
         res.status(400).send({ error: 'User/password invalid.' })
+    }
+})
+
+app.get('/validate', async (req, res) => {
+    const token = req.headers.authorization
+
+    try {
+        // @ts-ignore
+        const user = await getUserFromToken(token)
+        res.send(user)
+    } catch (err) {
+        res.status(400).send(err.message)
     }
 })
 
@@ -80,6 +107,25 @@ app.get('/users/:id', async (req, res) => {
     } catch (err) {
         // @ts-ignore
         res.status(400).send(`<pre>${err.message}</pre>`)
+    }
+})
+
+app.post('/sign-up', async (req, res) => {
+    const {email, password, name} = req.body
+
+    try {
+        const hash = bcrypt.hashSync(password, 8)
+        const user = await prisma.user.create({
+            data: {
+                email: email,
+                password: hash,
+                name: name
+            },
+            select: {id: true, name: true, email: true, orders: true}
+        })
+        res.send({ user, token: createToken(user.id) })
+    } catch (err) {
+        res.status(400).send(err.message)
     }
 })
 
@@ -153,6 +199,22 @@ app.post('/orders', async (req, res) => {
         res.status(400).send(err.message)
     }
 })
+
+// app.patch('/ordersQty/:id', async (req, res) => {
+//     const id = Number(req.params.id)
+//     const { quantity, itemId, userId } = req.body
+//     try {
+//         const user = await prisma.user.update({
+//             where: { id: id },
+//             data: { orders: { connect: { userId_itemId: { userId, itemId } } } }
+//         })
+//         res.send(user)
+//     } catch (err) {
+//         // @ts-ignore
+//         res.status(400).send(err.message)
+//     }
+
+// })
 
 app.listen(PORT, () => {
     console.log(`Server runing on: http://localhost:${PORT}/`)
