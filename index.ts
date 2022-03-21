@@ -185,7 +185,7 @@ app.post('/items', async (req, res) => {
 })
 
 app.get('/orders', async (req, res) => {
-    const orders = await prisma.order.findMany({ select: { user: true, item: true, quantity: true } })
+    const orders = await prisma.order.findMany()
     res.send(orders)
 })
 
@@ -200,21 +200,22 @@ app.post('/orders', async (req, res) => {
     }
 })
 
-// app.patch('/ordersQty/:id', async (req, res) => {
-//     const id = Number(req.params.id)
-//     const { quantity, itemId, userId } = req.body
-//     try {
-//         const user = await prisma.user.update({
-//             where: { id: id },
-//             data: { orders: { connect: { userId_itemId: { userId, itemId } } } }
-//         })
-//         res.send(user)
-//     } catch (err) {
-//         // @ts-ignore
-//         res.status(400).send(err.message)
-//     }
-
-// })
+app.patch('/ordersQty', async (req, res) => {
+    const { quantity, itemId, userId } = req.body
+    try {
+        const order = await prisma.order.update({
+            where: { userId_itemId: {
+                itemId: itemId,
+                userId: userId,
+            }},
+            data: { quantity: quantity }
+        })
+        res.send(order)
+    } catch (err) {
+        // @ts-ignore
+        res.status(400).send(err.message)
+    }
+})
 
 app.listen(PORT, () => {
     console.log(`Server runing on: http://localhost:${PORT}/`)
